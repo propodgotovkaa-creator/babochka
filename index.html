@@ -84,7 +84,7 @@
   .hintBtn:active{ transform: translateY(1px); }
   .hintBtn:disabled{ opacity:.45; cursor:not-allowed; }
 
-  /* Центрированная плашка задания (верх по центру) */
+  /* Плашка задания (верх по центру) */
   .centerTask{
     position:absolute; left:50%; top:18px; transform:translateX(-50%);
     z-index:18;
@@ -155,15 +155,16 @@
   .fx-wiggle{animation: fxWiggle var(--dur,650ms) cubic-bezier(.2,.8,.2,1)}
   .fx-softfade{animation: fxSoftFade var(--dur,1100ms) ease-out}
 
-  /* Подсказка: пульсация/мигание */
+  /* Подсказка: сильная пульсация/мигание на IMG (не конфликтует с появлением) */
   @keyframes fxHintPulse{
-    0%   { transform:scale(1);   filter:drop-shadow(0 0 0 rgba(120,220,255,0)); opacity:1; }
-    25%  { transform:scale(1.18);filter:drop-shadow(0 0 10px rgba(120,220,255,.75)); opacity:1; }
-    50%  { transform:scale(1);   filter:drop-shadow(0 0 0 rgba(120,220,255,0)); opacity:.35; }
-    75%  { transform:scale(1.18);filter:drop-shadow(0 0 12px rgba(120,220,255,.85)); opacity:1; }
-    100% { transform:scale(1);   filter:drop-shadow(0 0 0 rgba(120,220,255,0)); opacity:1; }
+    0%   { transform:scale(1);   opacity:1; filter:drop-shadow(0 0 0 rgba(120,220,255,0)); }
+    20%  { transform:scale(1.25);opacity:1; filter:drop-shadow(0 0 14px rgba(120,220,255,.95)); }
+    40%  { transform:scale(1);   opacity:.35; filter:drop-shadow(0 0 0 rgba(120,220,255,0)); }
+    60%  { transform:scale(1.25);opacity:1; filter:drop-shadow(0 0 16px rgba(120,220,255,.98)); }
+    80%  { transform:scale(1);   opacity:.35; filter:drop-shadow(0 0 0 rgba(120,220,255,0)); }
+    100% { transform:scale(1);   opacity:1; filter:drop-shadow(0 0 0 rgba(120,220,255,0)); }
   }
-  .fx-hint{ animation: fxHintPulse 900ms ease-in-out 0s 2; }
+  .target.fx-hint img{ animation: fxHintPulse 900ms ease-in-out 0s 2; }
 
   .codeBox{height:260px; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:12px; line-height:1.35;}
 </style>
@@ -296,6 +297,7 @@
   let last = {x:null, y:null};
 
   function clamp(n,a,b){ return Math.max(a, Math.min(b, n)); }
+
   function rect(){
     const r = stage.getBoundingClientRect();
     return {w: Math.max(1, r.width), h: Math.max(1, r.height)};
@@ -324,36 +326,78 @@
     progBadge.textContent = `${found}/${total}`;
   }
 
-  // Позиция "как можно дальше": best-of-N
+  function intersects(a, b){
+    return !(a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y);
+  }
+
+  function toStageRect(el){
+    if(!el) return null;
+    const sr = stage.getBoundingClientRect();
+    const r = el.getBoundingClientRect();
+    return { x: r.left - sr.left, y: r.top - sr.top, w: r.width, h: r.height };
+  }
+
+  function getForbiddenRects(){
+    const rects = [];
+    const a = toStageRect(centerTask);
+    const b = toStageRect(progBadge);
+    const c = toStageRect(hintBtn);
+
+    const pad = 10;
+    for(const r of [a,b,c]){
+      if(!r) continue;
+      rects.push({ x: r.x - pad, y: r.y - pad, w: r.w + pad*2, h: r.h + pad*2 });
+    }
+    return rects;
+  }
+
+  // Позиция "как можно дальше": best-of-N + запретные зоны + страховка диапазонов
   function randomPos(){
     const {w,h} = rect();
     const s = parseFloat(target.style.width) || 46;
     const p = clamp(+pad.value || 0, 0, 240);
 
-    const maxX = Math.max(p, w - p - s);
-    const maxY = Math.max(p, h - p - s);
+    const minX = p;
+    const minY = p;
+    const maxX = Math.max(minX, w - p - s);
+    const maxY = Math.max(minY, h - p - s);
 
+    const forbid = getForbiddenRects();
     const randPoint = () => ({
-      x: p + Math.random()*(maxX - p),
-      y: p + Math.random()*(maxY - p)
+      x: minX + Math.random() * (maxX - minX),
+      y: minY + Math.random() * (maxY - minY)
     });
+    const candidateRect = (pt) => ({ x: pt.x, y: pt.y, w: s, h: s });
 
     if(last.x === null){
+      for(let i=0;i<80;i++){
+        const pt = randPoint();
+        const cr = candidateRect(pt);
+        if(!forbid.some(fr => intersects(cr, fr))){
+          last = pt; return pt;
+        }
+      }
       const pt = randPoint();
-      last = pt;
-      return pt;
+      last = pt; return pt;
     }
 
-    const N = 28; // 20–40
+    const N = 60;
     let best = null;
     let bestD = -1;
 
     for(let i=0;i<N;i++){
       const pt = randPoint();
+      const cr = candidateRect(pt);
+      if(forbid.some(fr => intersects(cr, fr))) continue;
+
       const d = Math.hypot(pt.x - last.x, pt.y - last.y);
-      if(d > bestD){ bestD = d; best = pt; }
+      if(d > bestD){
+        bestD = d;
+        best = pt;
+      }
     }
 
+    if(!best) best = randPoint();
     last = best;
     return best;
   }
@@ -369,6 +413,7 @@
     finalOverlay.style.display = "flex";
     hintBtn.disabled = true;
   }
+
   function hideFinal(){
     finalOverlay.style.display = "none";
     hintBtn.disabled = false;
@@ -381,6 +426,7 @@
       return;
     }
     hideFinal();
+
     target.style.display = "";
 
     // перезапуск анимации появления каждый раунд
@@ -404,15 +450,24 @@
     target.style.display = "";
   }
 
-  // Подсказка: пульсация/мигание бабочки
+  // Подсказка: всегда помогает (если вдруг target скрыт — покажет на 2 секунды)
   function runHint(){
-    if(target.style.display === "none") return;
     if(finalOverlay.style.display === "flex") return;
+
+    const wasHidden = (target.style.display === "none");
+    if(wasHidden) target.style.display = "";
+
     target.classList.remove("fx-hint");
     void target.offsetWidth;
     target.classList.add("fx-hint");
+
+    setTimeout(()=>{
+      target.classList.remove("fx-hint");
+      if(wasHidden) target.style.display = "none";
+    }, 2000);
   }
 
+  // --- Генерация кода для Genially (встроены: запретные зоны + best-of-N + подсказка) ---
   function buildWidgetCode(cfg){
     const configJson = JSON.stringify(cfg);
 
@@ -429,8 +484,7 @@
     }
 
     #FX_ROOT .fx_hintBtn{
-      position:absolute;
-      right:64px; top:12px;
+      position:absolute; right:64px; top:12px;
       z-index:1000000;
       width:38px; height:38px;
       border-radius:12px;
@@ -506,13 +560,14 @@
     #FX_ROOT .fx-softfade{animation: fxSoftFade var(--dur,1100ms) ease-out}
 
     @keyframes fxHintPulse{
-      0%   { transform:scale(1);   filter:drop-shadow(0 0 0 rgba(120,220,255,0)); opacity:1; }
-      25%  { transform:scale(1.18);filter:drop-shadow(0 0 10px rgba(120,220,255,.75)); opacity:1; }
-      50%  { transform:scale(1);   filter:drop-shadow(0 0 0 rgba(120,220,255,0)); opacity:.35; }
-      75%  { transform:scale(1.18);filter:drop-shadow(0 0 12px rgba(120,220,255,.85)); opacity:1; }
-      100% { transform:scale(1);   filter:drop-shadow(0 0 0 rgba(120,220,255,0)); opacity:1; }
+      0%   { transform:scale(1);   opacity:1; filter:drop-shadow(0 0 0 rgba(120,220,255,0)); }
+      20%  { transform:scale(1.25);opacity:1; filter:drop-shadow(0 0 14px rgba(120,220,255,.95)); }
+      40%  { transform:scale(1);   opacity:.35; filter:drop-shadow(0 0 0 rgba(120,220,255,0)); }
+      60%  { transform:scale(1.25);opacity:1; filter:drop-shadow(0 0 16px rgba(120,220,255,.98)); }
+      80%  { transform:scale(1);   opacity:.35; filter:drop-shadow(0 0 0 rgba(120,220,255,0)); }
+      100% { transform:scale(1);   opacity:1; filter:drop-shadow(0 0 0 rgba(120,220,255,0)); }
     }
-    #FX_ROOT .fx-hint{ animation: fxHintPulse 900ms ease-in-out 0s 2; }
+    #FX_ROOT .fx_target.fx-hint img{ animation: fxHintPulse 900ms ease-in-out 0s 2; }
   </style>
 
   <div class="fx_prog"></div>
@@ -543,9 +598,34 @@
     let last = {x:null, y:null};
 
     function clamp(n,a,b){ return Math.max(a, Math.min(b, n)); }
+
     function rect(){
       const r = root.getBoundingClientRect();
       return {w: Math.max(1, r.width), h: Math.max(1, r.height)};
+    }
+
+    function intersects(a, b){
+      return !(a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y);
+    }
+
+    function toRootRect(el){
+      if(!el) return null;
+      const sr = root.getBoundingClientRect();
+      const r = el.getBoundingClientRect();
+      return { x: r.left - sr.left, y: r.top - sr.top, w: r.width, h: r.height };
+    }
+
+    function getForbiddenRects(){
+      const rects = [];
+      const a = toRootRect(taskEl);
+      const b = toRootRect(progEl);
+      const c = toRootRect(hintBtn);
+      const pad = 10;
+      for(const r of [a,b,c]){
+        if(!r) continue;
+        rects.push({ x: r.x - pad, y: r.y - pad, w: r.w + pad*2, h: r.h + pad*2 });
+      }
+      return rects;
     }
 
     function setAnim(){
@@ -562,33 +642,49 @@
       finalCard.textContent = (cfg.endText || 'Молодец!').trim();
     }
 
-    function randPoint(p, maxX, maxY){
-      return { x: p + Math.random()*(maxX - p), y: p + Math.random()*(maxY - p) };
+    function randPoint(minX, minY, maxX, maxY){
+      return { x: minX + Math.random()*(maxX - minX), y: minY + Math.random()*(maxY - minY) };
     }
 
     function randomPos(){
       const {w,h} = rect();
-      const s = cfg.size|0;
+      const s = Math.max(1, cfg.size|0);
       const p = clamp(cfg.pad|0, 0, 240);
 
-      const maxX = Math.max(p, w - p - s);
-      const maxY = Math.max(p, h - p - s);
+      const minX = p;
+      const minY = p;
+      const maxX = Math.max(minX, w - p - s);
+      const maxY = Math.max(minY, h - p - s);
+
+      const forbid = getForbiddenRects();
+      const candidateRect = (pt) => ({ x: pt.x, y: pt.y, w: s, h: s });
 
       if(last.x === null){
-        const pt = randPoint(p, maxX, maxY);
-        last = pt;
-        return pt;
+        for(let i=0;i<80;i++){
+          const pt = randPoint(minX, minY, maxX, maxY);
+          const cr = candidateRect(pt);
+          if(!forbid.some(fr => intersects(cr, fr))){
+            last = pt; return pt;
+          }
+        }
+        const pt = randPoint(minX, minY, maxX, maxY);
+        last = pt; return pt;
       }
 
-      const N = 28;
+      const N = 60;
       let best = null;
       let bestD = -1;
+
       for(let i=0;i<N;i++){
-        const pt = randPoint(p, maxX, maxY);
+        const pt = randPoint(minX, minY, maxX, maxY);
+        const cr = candidateRect(pt);
+        if(forbid.some(fr => intersects(cr, fr))) continue;
+
         const d = Math.hypot(pt.x - last.x, pt.y - last.y);
         if(d > bestD){ bestD = d; best = pt; }
       }
 
+      if(!best) best = randPoint(minX, minY, maxX, maxY);
       last = best;
       return best;
     }
@@ -618,7 +714,6 @@
       hideFinal();
       target.style.display = '';
 
-      // перезапуск анимации
       target.classList.remove('fx-none','fx-fade','fx-pop','fx-slide','fx-wiggle','fx-softfade','fx-hint');
       void target.offsetWidth;
 
@@ -628,11 +723,19 @@
     }
 
     function runHint(){
-      if(target.style.display === 'none') return;
       if(final.style.display === 'flex') return;
+
+      const wasHidden = (target.style.display === 'none');
+      if(wasHidden) target.style.display = '';
+
       target.classList.remove('fx-hint');
       void target.offsetWidth;
       target.classList.add('fx-hint');
+
+      setTimeout(()=>{
+        target.classList.remove('fx-hint');
+        if(wasHidden) target.style.display = 'none';
+      }, 2000);
     }
 
     // init
@@ -704,8 +807,6 @@
 
     const res = await testImage(url);
     imgStatus.textContent = res.msg;
-
-    finalCard.textContent = (endText.value || "Молодец!").trim();
 
     if(target.style.display !== "none") place();
   }
