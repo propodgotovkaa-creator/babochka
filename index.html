@@ -132,15 +132,8 @@
   @keyframes fxFadeIn{from{opacity:0} to{opacity:1}}
   @keyframes fxPopIn{0%{opacity:0; transform:scale(.7)} 100%{opacity:1; transform:scale(1)}}
   @keyframes fxSlideIn{0%{opacity:0; transform:translateY(-10px)} 100%{opacity:1; transform:translateY(0)}}
-  @keyframes fxWiggle{
-    0%{opacity:0; transform:scale(.9) rotate(-4deg)}
-    70%{opacity:1; transform:scale(1.02) rotate(2deg)}
-    100%{opacity:1; transform:scale(1) rotate(0deg)}
-  }
-  @keyframes fxSoftFade{
-    0%{opacity:0; transform:scale(.96)}
-    100%{opacity:1; transform:scale(1)}
-  }
+  @keyframes fxWiggle{0%{opacity:0; transform:scale(.9) rotate(-4deg)} 70%{opacity:1; transform:scale(1.02) rotate(2deg)} 100%{opacity:1; transform:scale(1) rotate(0deg)}}
+  @keyframes fxSoftFade{0%{opacity:0; transform:scale(.96)} 100%{opacity:1; transform:scale(1)}}
 
   .fx-none{}
   .fx-fade{animation: fxFadeIn var(--dur,500ms) ease-out}
@@ -165,7 +158,6 @@
 
 <body>
 <div class="wrap">
-
   <div class="panel">
     <h1>Редактор «Найди персонажа»</h1>
 
@@ -217,7 +209,7 @@
     <div class="two">
       <div class="row">
         <label>Отступ от краёв (px)</label>
-        <input id="pad" type="number" min="0" max="200" value="12" />
+        <input id="pad" type="number" min="0" max="220" value="12" />
       </div>
       <div class="row">
         <label>Пауза между раундами (мс)</label>
@@ -234,9 +226,6 @@
     <div class="row">
       <label>Код для вставки в Genially (HTML / Embed)</label>
       <textarea id="code" class="codeBox" spellcheck="false"></textarea>
-      <div style="font-size:12px;color:var(--muted);margin-top:6px">
-        В Genially вставляй в HTML/Embed.
-      </div>
     </div>
   </div>
 
@@ -253,12 +242,10 @@
       <div class="finalCard" id="finalCard">Молодец! Приходи играть ещё раз 😊</div>
     </div>
   </div>
-
 </div>
 
 <script>
   const $ = (id)=>document.getElementById(id);
-
   const DEFAULT_URL = "https://propodgotovkaa-creator.github.io/babochka/babochka.png";
 
   const imgUrl = $("imgUrl");
@@ -282,17 +269,20 @@
 
   const finalOverlay = $("finalOverlay");
   const finalCard = $("finalCard");
-
   const codeBox = $("code");
 
   let found = 0;
   let last = {x:null, y:null};
 
-  // Память ячеек (чтобы не повторять места)
-  let usedCells = new Set();
+  // память последних позиций (чтобы не повторялось)
+  const HISTORY_MAX = 10;
+  const history = []; // [{x,y}]
+  function pushHistory(pt){
+    history.push({x:pt.x, y:pt.y});
+    if(history.length > HISTORY_MAX) history.shift();
+  }
 
   function clamp(n,a,b){ return Math.max(a, Math.min(b, n)); }
-
   function rect(){
     const r = stage.getBoundingClientRect();
     return {w: Math.max(1, r.width), h: Math.max(1, r.height)};
@@ -332,155 +322,89 @@
     return { x: r.left - sr.left, y: r.top - sr.top, w: r.width, h: r.height };
   }
 
+  // --- запретные зоны: плашки + логотип Genially снизу слева ---
   function getForbiddenRects(){
     const rects = [];
     const a = toStageRect(centerTask);
     const b = toStageRect(progBadge);
     const c = toStageRect(hintBtn);
 
-    const pad = 10;
+    const padUI = 10;
     for(const r of [a,b,c]){
       if(!r) continue;
-      rects.push({ x: r.x - pad, y: r.y - pad, w: r.w + pad*2, h: r.h + pad*2 });
+      rects.push({ x: r.x - padUI, y: r.y - padUI, w: r.w + padUI*2, h: r.h + padUI*2 });
     }
+
+    // ⚠️ ВАЖНО: “водяной знак” Genially обычно слева снизу.
+    // Мы резервируем под него место фиксированно. Можно подстроить размеры, если нужно.
+    const {w,h} = rect();
+    const logoW = 190;
+    const logoH = 70;
+    const logoPad = 8;
+    rects.push({ x: 0, y: h - logoH - logoPad, w: logoW + logoPad, h: logoH + logoPad });
+
     return rects;
   }
 
-  // --- Новый алгоритм без повторов ---
-  // Делим сцену на сетку; выбираем ячейку, которую ещё не использовали, и стараемся выбрать дальнюю от last
-  function pickCell(w,h,s,p,forbid){
-    // Сетка: подстраиваем под размер (чтобы ячеек было достаточно)
-    const cols = clamp(Math.floor(w / Math.max(140, s*2)), 4, 9);
-    const rows = clamp(Math.floor(h / Math.max(120, s*2)), 3, 8);
-
-    const minX = p, minY = p;
-    const maxX = Math.max(minX, w - p - s);
-    const maxY = Math.max(minY, h - p - s);
-
-    const cellW = (maxX - minX) / cols;
-    const cellH = (maxY - minY) / rows;
-
-    const key = (cx,cy)=> `${cx},${cy}`;
-
-    // сформируем список доступных ячеек (где вообще можно поставить спрайт без запретных зон)
-    const candidates = [];
-    for(let cy=0; cy<rows; cy++){
-      for(let cx=0; cx<cols; cx++){
-        // центр ячейки
-        const centerX = minX + (cx + 0.5) * cellW;
-        const centerY = minY + (cy + 0.5) * cellH;
-        const rectCandidate = { x: centerX - s/2, y: centerY - s/2, w:s, h:s };
-        if(forbid.some(fr => intersects(rectCandidate, fr))) continue;
-        candidates.push({cx,cy, centerX, centerY, k:key(cx,cy)});
-      }
+  function distanceToHistory(pt){
+    if(history.length === 0) return Infinity;
+    let minD = Infinity;
+    for(const p of history){
+      const d = Math.hypot(pt.x - p.x, pt.y - p.y);
+      if(d < minD) minD = d;
     }
-
-    // если все использованы — сброс (иначе игра может “застрять”)
-    const unused = candidates.filter(c => !usedCells.has(c.k));
-    const pool = (unused.length ? unused : candidates);
-
-    if(!pool.length){
-      // вообще негде (очень маленький контейнер) — пусть fallback будет обычный рандом
-      return {cols, rows, minX, minY, maxX, maxY, cellW, cellH, chosen:null};
-    }
-
-    // выбираем "самую дальнюю" ячейку от last (если last есть), иначе случайную
-    let best = pool[0];
-    let bestScore = -1;
-    for(const c of pool){
-      const dx = (last.x === null) ? 0 : (c.centerX - last.x);
-      const dy = (last.y === null) ? 0 : (c.centerY - last.y);
-      const d = Math.hypot(dx,dy);
-      // небольшой рандом чтобы не было “одно и то же” при одинаковых дистанциях
-      const score = d + Math.random()*5;
-      if(score > bestScore){
-        bestScore = score;
-        best = c;
-      }
-    }
-
-    // отмечаем ячейку использованной (если был полный круг — usedCells уже не чистим тут: очистим когда реально все заняты)
-    if(unused.length === 0){
-      usedCells.clear();
-    }
-    usedCells.add(best.k);
-
-    return {cols, rows, minX, minY, maxX, maxY, cellW, cellH, chosen:best};
+    return minD;
   }
 
+  // прежний подход, но умнее:
+  // выбираем точку, где МАКСИМАЛЬНА минимальная дистанция до последних точек (history)
+  // + ещё немного учитываем дистанцию до last
   function randomPos(){
     const {w,h} = rect();
     const s = parseFloat(target.style.width) || 46;
     const p = clamp(+pad.value || 0, 0, 240);
-    const forbid = getForbiddenRects();
 
     const minX = p;
     const minY = p;
     const maxX = Math.max(minX, w - p - s);
     const maxY = Math.max(minY, h - p - s);
 
-    // 1) выбираем ячейку (без повторов)
-    const cell = pickCell(w,h,s,p,forbid);
+    const forbid = getForbiddenRects();
+    const candidateRect = (pt)=>({x:pt.x,y:pt.y,w:s,h:s});
 
-    // 2) точку внутри ячейки выбираем “лучшее из N” (чтобы ещё и не пересекало запреты)
-    const N = 30;
-    const candidateRect = (pt) => ({ x: pt.x, y: pt.y, w: s, h: s });
-
-    const randInBounds = () => ({
-      x: minX + Math.random()*(maxX - minX),
-      y: minY + Math.random()*(maxY - minY)
+    const randPoint = () => ({
+      x: minX + Math.random() * (maxX - minX),
+      y: minY + Math.random() * (maxY - minY)
     });
 
-    // если ячейка не выбрана (на совсем маленьком контейнере) — простой рандом с защитой
-    if(!cell.chosen){
-      for(let i=0;i<80;i++){
-        const pt = randInBounds();
-        if(!forbid.some(fr => intersects(candidateRect(pt), fr))){
-          last = pt; return pt;
-        }
-      }
-      const pt = randInBounds();
-      last = pt; return pt;
-    }
-
-    const cx = cell.chosen.cx;
-    const cy = cell.chosen.cy;
-
-    const cellMinX = cell.minX + cx * cell.cellW;
-    const cellMinY = cell.minY + cy * cell.cellH;
-    const cellMaxX = Math.min(cell.maxX, cellMinX + cell.cellW);
-    const cellMaxY = Math.min(cell.maxY, cellMinY + cell.cellH);
-
+    const N = 80; // больше попыток = меньше повторов
     let best = null;
-    let bestD = -1;
+    let bestScore = -1;
 
     for(let i=0;i<N;i++){
-      const pt = {
-        x: cellMinX + Math.random()*Math.max(0, (cellMaxX - cellMinX)),
-        y: cellMinY + Math.random()*Math.max(0, (cellMaxY - cellMinY))
-      };
+      const pt = randPoint();
       const cr = candidateRect(pt);
       if(forbid.some(fr => intersects(cr, fr))) continue;
 
-      const d = (last.x === null) ? 0 : Math.hypot(pt.x - last.x, pt.y - last.y);
-      if(d > bestD){
-        bestD = d;
+      const dHist = distanceToHistory(pt); // хотим, чтобы было далеко от всех последних
+      const dLast = (last.x===null) ? dHist : Math.hypot(pt.x-last.x, pt.y-last.y);
+
+      // score: в приоритете "не повторяться" (dHist), потом "далеко от прошлого" (dLast)
+      const score = dHist * 1.25 + dLast * 0.45 + Math.random()*4;
+
+      if(score > bestScore){
+        bestScore = score;
         best = pt;
       }
     }
 
-    // fallback — если внутри ячейки не получилось, попробуем по всему полю
+    // если вдруг все кандидаты пересекают запреты — fallback без запретов (очень редко)
     if(!best){
-      for(let i=0;i<120;i++){
-        const pt = randInBounds();
-        if(!forbid.some(fr => intersects(candidateRect(pt), fr))){
-          best = pt; break;
-        }
-      }
+      best = randPoint();
     }
 
-    if(!best) best = randInBounds();
     last = best;
+    pushHistory(best);
     return best;
   }
 
@@ -521,7 +445,7 @@
   function resetGame(){
     found = 0;
     last = {x:null,y:null};
-    usedCells.clear();
+    history.length = 0;
     hideFinal();
     updateTexts();
     setTargetSize(+size.value || 46);
@@ -547,7 +471,7 @@
     }, 2000);
   }
 
-  // --- Генерация кода для Genially (тот же алгоритм без повторов) ---
+  // --- Генерация кода для Genially (тот же алгоритм + запрет логотипа) ---
   function buildWidgetCode(cfg){
     const configJson = JSON.stringify(cfg);
 
@@ -600,7 +524,6 @@
 
     #FX_ROOT .fx_target{
       position:absolute; z-index:999999;
-      width:48px; height:48px;
       cursor:pointer; user-select:none;
       -webkit-tap-highlight-color: transparent;
     }
@@ -676,7 +599,13 @@
 
     let found = 0;
     let last = {x:null, y:null};
-    let usedCells = new Set();
+
+    const HISTORY_MAX = 10;
+    const history = [];
+    function pushHistory(pt){
+      history.push({x:pt.x, y:pt.y});
+      if(history.length > HISTORY_MAX) history.shift();
+    }
 
     function clamp(n,a,b){ return Math.max(a, Math.min(b, n)); }
     function rect(){
@@ -697,11 +626,17 @@
       const a = toRootRect(taskEl);
       const b = toRootRect(progEl);
       const c = toRootRect(hintBtn);
-      const pad = 10;
+      const padUI = 10;
       for(const r of [a,b,c]){
         if(!r) continue;
-        rects.push({ x: r.x - pad, y: r.y - pad, w: r.w + pad*2, h: r.h + pad*2 });
+        rects.push({ x: r.x - padUI, y: r.y - padUI, w: r.w + padUI*2, h: r.h + padUI*2 });
       }
+
+      // запрет водяного знака слева снизу
+      const {w,h} = rect();
+      const logoW = 190, logoH = 70, logoPad = 8;
+      rects.push({ x: 0, y: h - logoH - logoPad, w: logoW + logoPad, h: logoH + logoPad });
+
       return rects;
     }
 
@@ -719,112 +654,49 @@
       finalCard.textContent = (cfg.endText || 'Молодец!').trim();
     }
 
-    function pickCell(w,h,s,p,forbid){
-      const cols = clamp(Math.floor(w / Math.max(140, s*2)), 4, 9);
-      const rows = clamp(Math.floor(h / Math.max(120, s*2)), 3, 8);
-
-      const minX = p, minY = p;
-      const maxX = Math.max(minX, w - p - s);
-      const maxY = Math.max(minY, h - p - s);
-
-      const cellW = (maxX - minX) / cols;
-      const cellH = (maxY - minY) / rows;
-
-      const key = (cx,cy)=> cx + ',' + cy;
-
-      const candidates = [];
-      for(let cy=0; cy<rows; cy++){
-        for(let cx=0; cx<cols; cx++){
-          const centerX = minX + (cx + 0.5) * cellW;
-          const centerY = minY + (cy + 0.5) * cellH;
-          const rc = { x:centerX - s/2, y:centerY - s/2, w:s, h:s };
-          if(forbid.some(fr => intersects(rc, fr))) continue;
-          candidates.push({cx,cy, centerX, centerY, k:key(cx,cy)});
-        }
+    function distanceToHistory(pt){
+      if(history.length === 0) return Infinity;
+      let minD = Infinity;
+      for(const p of history){
+        const d = Math.hypot(pt.x - p.x, pt.y - p.y);
+        if(d < minD) minD = d;
       }
-
-      const unused = candidates.filter(c => !usedCells.has(c.k));
-      const pool = (unused.length ? unused : candidates);
-
-      if(!pool.length){
-        return {cols, rows, minX, minY, maxX, maxY, cellW, cellH, chosen:null};
-      }
-
-      let best = pool[0];
-      let bestScore = -1;
-      for(const c of pool){
-        const dx = (last.x === null) ? 0 : (c.centerX - last.x);
-        const dy = (last.y === null) ? 0 : (c.centerY - last.y);
-        const d = Math.hypot(dx,dy);
-        const score = d + Math.random()*5;
-        if(score > bestScore){ bestScore = score; best = c; }
-      }
-
-      if(unused.length === 0) usedCells.clear();
-      usedCells.add(best.k);
-
-      return {cols, rows, minX, minY, maxX, maxY, cellW, cellH, chosen:best};
+      return minD;
     }
 
     function randomPos(){
       const {w,h} = rect();
       const s = Math.max(1, cfg.size|0);
       const p = clamp(cfg.pad|0, 0, 240);
-      const forbid = getForbiddenRects();
 
       const minX = p;
       const minY = p;
       const maxX = Math.max(minX, w - p - s);
       const maxY = Math.max(minY, h - p - s);
 
-      const cell = pickCell(w,h,s,p,forbid);
+      const forbid = getForbiddenRects();
       const candidateRect = (pt)=>({x:pt.x,y:pt.y,w:s,h:s});
+      const randPoint = ()=>({ x:minX+Math.random()*(maxX-minX), y:minY+Math.random()*(maxY-minY) });
 
-      const randInBounds = ()=>({
-        x: minX + Math.random()*(maxX - minX),
-        y: minY + Math.random()*(maxY - minY)
-      });
-
-      if(!cell.chosen){
-        for(let i=0;i<80;i++){
-          const pt = randInBounds();
-          if(!forbid.some(fr => intersects(candidateRect(pt), fr))){
-            last = pt; return pt;
-          }
-        }
-        const pt = randInBounds(); last = pt; return pt;
-      }
-
-      const cx = cell.chosen.cx, cy = cell.chosen.cy;
-      const cellMinX = cell.minX + cx * cell.cellW;
-      const cellMinY = cell.minY + cy * cell.cellH;
-      const cellMaxX = Math.min(cell.maxX, cellMinX + cell.cellW);
-      const cellMaxY = Math.min(cell.maxY, cellMinY + cell.cellH);
-
+      const N = 80;
       let best = null;
-      let bestD = -1;
+      let bestScore = -1;
 
-      for(let i=0;i<30;i++){
-        const pt = {
-          x: cellMinX + Math.random()*Math.max(0,(cellMaxX - cellMinX)),
-          y: cellMinY + Math.random()*Math.max(0,(cellMaxY - cellMinY))
-        };
-        if(forbid.some(fr => intersects(candidateRect(pt), fr))) continue;
-        const d = (last.x === null) ? 0 : Math.hypot(pt.x - last.x, pt.y - last.y);
-        if(d > bestD){ bestD = d; best = pt; }
+      for(let i=0;i<N;i++){
+        const pt = randPoint();
+        const cr = candidateRect(pt);
+        if(forbid.some(fr => intersects(cr, fr))) continue;
+
+        const dHist = distanceToHistory(pt);
+        const dLast = (last.x===null) ? dHist : Math.hypot(pt.x-last.x, pt.y-last.y);
+        const score = dHist*1.25 + dLast*0.45 + Math.random()*4;
+
+        if(score > bestScore){ bestScore=score; best=pt; }
       }
 
-      if(!best){
-        for(let i=0;i<120;i++){
-          const pt = randInBounds();
-          if(!forbid.some(fr => intersects(candidateRect(pt), fr))){
-            best = pt; break;
-          }
-        }
-      }
-
-      if(!best) best = randInBounds();
+      if(!best) best = randPoint();
       last = best;
+      pushHistory(best);
       return best;
     }
 
@@ -874,9 +746,6 @@
       }, 2000);
     }
 
-    root.style.position = 'relative';
-    root.style.background = 'transparent';
-
     img.referrerPolicy = 'no-referrer';
     img.src = cfg.url || '';
 
@@ -919,46 +788,6 @@
     };
   }
 
-  async function testImage(url){
-    return new Promise((resolve)=>{
-      if(!url){ resolve({ok:false, msg:""}); return; }
-      const i = new Image();
-      i.onload = ()=> resolve({ok:true, msg:"✓ картинка загружена"});
-      i.onerror = ()=> resolve({ok:false, msg:"⚠️ не удалось загрузить картинку (проверь URL)"});
-      i.referrerPolicy = "no-referrer";
-      i.src = url;
-    });
-  }
-
-  async function apply(){
-    updateTexts();
-    setTargetSize(+size.value || 46);
-    setAnim();
-    updateProgress();
-
-    const url = (imgUrl.value || "").trim();
-    targetImg.referrerPolicy = "no-referrer";
-    targetImg.src = url;
-
-    const res = await testImage(url);
-    imgStatus.textContent = res.msg;
-
-    // при изменении параметров — сброс памяти мест (иначе может быть “мало доступных ячеек”)
-    usedCells.clear();
-
-    if(target.style.display !== "none") place();
-  }
-
-  imgUrl.addEventListener("change", apply);
-  size.addEventListener("input", apply);
-  rounds.addEventListener("change", ()=>{ apply(); updateProgress(); });
-  anim.addEventListener("change", apply);
-  dur.addEventListener("change", apply);
-  pad.addEventListener("change", apply);
-  gap.addEventListener("change", apply);
-  taskText.addEventListener("input", updateTexts);
-  endText.addEventListener("input", updateTexts);
-
   $("reset").addEventListener("click", resetGame);
 
   $("getCode").addEventListener("click", ()=>{
@@ -995,7 +824,9 @@
 
   // INIT
   imgUrl.value = DEFAULT_URL;
+  targetImg.referrerPolicy = "no-referrer";
   targetImg.src = DEFAULT_URL;
+
   updateTexts();
   resetGame();
 </script>
