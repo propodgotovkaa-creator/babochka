@@ -209,7 +209,7 @@
     <div class="two">
       <div class="row">
         <label>Отступ от краёв (px)</label>
-        <input id="pad" type="number" min="0" max="220" value="12" />
+        <input id="pad" type="number" min="0" max="240" value="12" />
       </div>
       <div class="row">
         <label>Пауза между раундами (мс)</label>
@@ -274,7 +274,7 @@
   let found = 0;
   let last = {x:null, y:null};
 
-  // память последних позиций (чтобы не повторялось)
+  // память последних позиций (уменьшает повторы)
   const HISTORY_MAX = 10;
   const history = []; // [{x,y}]
   function pushHistory(pt){
@@ -322,7 +322,7 @@
     return { x: r.left - sr.left, y: r.top - sr.top, w: r.width, h: r.height };
   }
 
-  // --- запретные зоны: плашки + логотип Genially снизу слева ---
+  // Запретные зоны: плашки + логотип Genially + зона стрелки "следующий слайд" справа
   function getForbiddenRects(){
     const rects = [];
     const a = toStageRect(centerTask);
@@ -335,13 +335,19 @@
       rects.push({ x: r.x - padUI, y: r.y - padUI, w: r.w + padUI*2, h: r.h + padUI*2 });
     }
 
-    // ⚠️ ВАЖНО: “водяной знак” Genially обычно слева снизу.
-    // Мы резервируем под него место фиксированно. Можно подстроить размеры, если нужно.
     const {w,h} = rect();
+
+    // 1) Лого Genially (слева снизу)
     const logoW = 190;
     const logoH = 70;
     const logoPad = 8;
     rects.push({ x: 0, y: h - logoH - logoPad, w: logoW + logoPad, h: logoH + logoPad });
+
+    // 2) Зона стрелки "следующий слайд" (справа) — чтобы бабочка не попадала на неё
+    // Если нужно шире: navW = 120
+    const navW = 90;
+    const navPad = 6;
+    rects.push({ x: w - navW - navPad, y: 0, w: navW + navPad, h: h });
 
     return rects;
   }
@@ -356,9 +362,7 @@
     return minD;
   }
 
-  // прежний подход, но умнее:
-  // выбираем точку, где МАКСИМАЛЬНА минимальная дистанция до последних точек (history)
-  // + ещё немного учитываем дистанцию до last
+  // Выбираем точку так, чтобы она была далеко от последних точек и от last, не залезая на запрещённые зоны
   function randomPos(){
     const {w,h} = rect();
     const s = parseFloat(target.style.width) || 46;
@@ -371,13 +375,9 @@
 
     const forbid = getForbiddenRects();
     const candidateRect = (pt)=>({x:pt.x,y:pt.y,w:s,h:s});
+    const randPoint = ()=>({ x:minX+Math.random()*(maxX-minX), y:minY+Math.random()*(maxY-minY) });
 
-    const randPoint = () => ({
-      x: minX + Math.random() * (maxX - minX),
-      y: minY + Math.random() * (maxY - minY)
-    });
-
-    const N = 80; // больше попыток = меньше повторов
+    const N = 80; // больше попыток = разнообразнее
     let best = null;
     let bestScore = -1;
 
@@ -386,23 +386,14 @@
       const cr = candidateRect(pt);
       if(forbid.some(fr => intersects(cr, fr))) continue;
 
-      const dHist = distanceToHistory(pt); // хотим, чтобы было далеко от всех последних
+      const dHist = distanceToHistory(pt);
       const dLast = (last.x===null) ? dHist : Math.hypot(pt.x-last.x, pt.y-last.y);
+      const score = dHist*1.25 + dLast*0.45 + Math.random()*4;
 
-      // score: в приоритете "не повторяться" (dHist), потом "далеко от прошлого" (dLast)
-      const score = dHist * 1.25 + dLast * 0.45 + Math.random()*4;
-
-      if(score > bestScore){
-        bestScore = score;
-        best = pt;
-      }
+      if(score > bestScore){ bestScore=score; best=pt; }
     }
 
-    // если вдруг все кандидаты пересекают запреты — fallback без запретов (очень редко)
-    if(!best){
-      best = randPoint();
-    }
-
+    if(!best) best = randPoint(); // редкий fallback
     last = best;
     pushHistory(best);
     return best;
@@ -471,7 +462,7 @@
     }, 2000);
   }
 
-  // --- Генерация кода для Genially (тот же алгоритм + запрет логотипа) ---
+  // --- Генерация кода для Genially (учтены: плашки + лого + правая стрелка) ---
   function buildWidgetCode(cfg){
     const configJson = JSON.stringify(cfg);
 
@@ -621,21 +612,28 @@
       const r = el.getBoundingClientRect();
       return { x: r.left - sr.left, y: r.top - sr.top, w: r.width, h: r.height };
     }
+
     function getForbiddenRects(){
       const rects = [];
       const a = toRootRect(taskEl);
       const b = toRootRect(progEl);
       const c = toRootRect(hintBtn);
+
       const padUI = 10;
       for(const r of [a,b,c]){
         if(!r) continue;
         rects.push({ x: r.x - padUI, y: r.y - padUI, w: r.w + padUI*2, h: r.h + padUI*2 });
       }
 
-      // запрет водяного знака слева снизу
       const {w,h} = rect();
+
+      // лого Genially (слева снизу)
       const logoW = 190, logoH = 70, logoPad = 8;
       rects.push({ x: 0, y: h - logoH - logoPad, w: logoW + logoPad, h: logoH + logoPad });
+
+      // зона стрелки "следующий слайд" (справа)
+      const navW = 90, navPad = 6;
+      rects.push({ x: w - navW - navPad, y: 0, w: navW + navPad, h: h });
 
       return rects;
     }
