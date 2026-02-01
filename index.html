@@ -54,7 +54,7 @@
     overflow:hidden;
   }
 
-  /* Верхний прогресс (можно оставить) */
+  /* Верхний прогресс */
   .progBadge{
     position:absolute; right:14px; top:14px; z-index:20;
     background:rgba(0,0,0,.45); border:1px solid rgba(255,255,255,.18);
@@ -63,7 +63,28 @@
     pointer-events:none;
   }
 
-  /* Центрированная плашка задания */
+  /* Кнопка подсказки (лампочка) */
+  .hintBtn{
+    position:absolute;
+    right:64px; top:12px;
+    z-index:26;
+    width:38px; height:38px;
+    border-radius:12px;
+    border:1px solid rgba(255,255,255,.18);
+    background:rgba(0,0,0,.35);
+    color:rgba(255,255,255,.92);
+    font-size:18px;
+    cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    backdrop-filter: blur(6px);
+    box-shadow: 0 12px 30px rgba(0,0,0,.18);
+    -webkit-tap-highlight-color: transparent;
+  }
+  .hintBtn:hover{ background:rgba(0,0,0,.45); }
+  .hintBtn:active{ transform: translateY(1px); }
+  .hintBtn:disabled{ opacity:.45; cursor:not-allowed; }
+
+  /* Центрированная плашка задания (верх по центру) */
   .centerTask{
     position:absolute; left:50%; top:18px; transform:translateX(-50%);
     z-index:18;
@@ -113,7 +134,7 @@
   }
   .target img{display:block;width:100%;height:100%;object-fit:contain}
 
-  /* Анимации */
+  /* Анимации появления */
   @keyframes fxFadeIn{from{opacity:0} to{opacity:1}}
   @keyframes fxPopIn{0%{opacity:0; transform:scale(.7)} 100%{opacity:1; transform:scale(1)}}
   @keyframes fxSlideIn{0%{opacity:0; transform:translateY(-10px)} 100%{opacity:1; transform:translateY(0)}}
@@ -122,11 +143,27 @@
     70%{opacity:1; transform:scale(1.02) rotate(2deg)}
     100%{opacity:1; transform:scale(1) rotate(0deg)}
   }
+  @keyframes fxSoftFade{
+    0%{opacity:0; transform:scale(.96)}
+    100%{opacity:1; transform:scale(1)}
+  }
+
   .fx-none{}
   .fx-fade{animation: fxFadeIn var(--dur,500ms) ease-out}
   .fx-pop{animation: fxPopIn var(--dur,500ms) cubic-bezier(.2,.8,.2,1)}
   .fx-slide{animation: fxSlideIn var(--dur,500ms) ease-out}
   .fx-wiggle{animation: fxWiggle var(--dur,650ms) cubic-bezier(.2,.8,.2,1)}
+  .fx-softfade{animation: fxSoftFade var(--dur,1100ms) ease-out}
+
+  /* Подсказка: пульсация/мигание */
+  @keyframes fxHintPulse{
+    0%   { transform:scale(1);   filter:drop-shadow(0 0 0 rgba(120,220,255,0)); opacity:1; }
+    25%  { transform:scale(1.18);filter:drop-shadow(0 0 10px rgba(120,220,255,.75)); opacity:1; }
+    50%  { transform:scale(1);   filter:drop-shadow(0 0 0 rgba(120,220,255,0)); opacity:.35; }
+    75%  { transform:scale(1.18);filter:drop-shadow(0 0 12px rgba(120,220,255,.85)); opacity:1; }
+    100% { transform:scale(1);   filter:drop-shadow(0 0 0 rgba(120,220,255,0)); opacity:1; }
+  }
+  .fx-hint{ animation: fxHintPulse 900ms ease-in-out 0s 2; }
 
   .codeBox{height:260px; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:12px; line-height:1.35;}
 </style>
@@ -147,7 +184,7 @@
     <div class="two">
       <div class="row">
         <label>Размер (px): <span id="sizeVal">46</span></label>
-        <input id="size" type="range" min="18" max="180" value="46" />
+        <input id="size" type="range" min="18" max="220" value="46" />
       </div>
       <div class="row">
         <label>Количество находок (раундов)</label>
@@ -160,20 +197,21 @@
         <label>Анимация появления</label>
         <select id="anim">
           <option value="none">без анимации</option>
+          <option value="softfade" selected>soft fade (медленно)</option>
           <option value="fade">fade</option>
-          <option value="pop" selected>pop</option>
+          <option value="pop">pop</option>
           <option value="slide">slide</option>
           <option value="wiggle">wiggle</option>
         </select>
       </div>
       <div class="row">
         <label>Длительность анимации (мс)</label>
-        <input id="dur" type="number" min="0" max="3000" value="550" />
+        <input id="dur" type="number" min="0" max="3000" value="1100" />
       </div>
     </div>
 
     <div class="row">
-      <label>Инструкция / текст задания (показывается сверху по центру)</label>
+      <label>Инструкция / текст задания (плашка сверху по центру)</label>
       <input id="taskText" type="text" value="Найди бабочку и нажми на неё!" />
     </div>
 
@@ -203,16 +241,17 @@
       <label>Код для вставки в Genially (HTML / Embed)</label>
       <textarea id="code" class="codeBox" spellcheck="false"></textarea>
       <div style="font-size:12px;color:var(--muted);margin-top:6px">
-        В Genially вставляй в HTML/Embed. Персонаж должен быть PNG/WebP/SVG с прозрачностью.
+        В Genially вставляй в HTML/Embed.
       </div>
     </div>
   </div>
 
   <div class="stage" id="stage">
     <div class="progBadge" id="progBadge">0/7</div>
+    <button class="hintBtn" id="hintBtn" title="Подсказка" aria-label="Подсказка">💡</button>
     <div class="centerTask" id="centerTask">Найди бабочку и нажми на неё!</div>
 
-    <div class="target fx-pop" id="target" style="--dur:550ms;">
+    <div class="target fx-softfade" id="target" style="--dur:1100ms;">
       <img id="targetImg" alt="" />
     </div>
 
@@ -226,7 +265,7 @@
 <script>
   const $ = (id)=>document.getElementById(id);
 
-  // ✅ дефолт: бабочка на GitHub Pages
+  // дефолт: бабочка на GitHub Pages
   const DEFAULT_URL = "https://propodgotovkaa-creator.github.io/babochka/babochka.png";
 
   const imgUrl = $("imgUrl");
@@ -246,6 +285,7 @@
   const targetImg = $("targetImg");
   const progBadge = $("progBadge");
   const centerTask = $("centerTask");
+  const hintBtn = $("hintBtn");
 
   const finalOverlay = $("finalOverlay");
   const finalCard = $("finalCard");
@@ -256,7 +296,6 @@
   let last = {x:null, y:null};
 
   function clamp(n,a,b){ return Math.max(a, Math.min(b, n)); }
-
   function rect(){
     const r = stage.getBoundingClientRect();
     return {w: Math.max(1, r.width), h: Math.max(1, r.height)};
@@ -269,7 +308,7 @@
   }
 
   function setAnim(){
-    target.classList.remove("fx-none","fx-fade","fx-pop","fx-slide","fx-wiggle");
+    target.classList.remove("fx-none","fx-fade","fx-pop","fx-slide","fx-wiggle","fx-softfade");
     const v = anim.value;
     target.classList.add(v==="none" ? "fx-none" : ("fx-"+v));
     target.style.setProperty("--dur", Math.max(0, +dur.value || 0) + "ms");
@@ -285,6 +324,7 @@
     progBadge.textContent = `${found}/${total}`;
   }
 
+  // Позиция "как можно дальше": best-of-N
   function randomPos(){
     const {w,h} = rect();
     const s = parseFloat(target.style.width) || 46;
@@ -293,15 +333,29 @@
     const maxX = Math.max(p, w - p - s);
     const maxY = Math.max(p, h - p - s);
 
-    let x,y,tries=0;
-    do{
-      x = p + Math.random()*(maxX - p);
-      y = p + Math.random()*(maxY - p);
-      tries++;
-    }while(tries<15 && last.x!==null && Math.hypot(x-last.x, y-last.y) < s*1.4);
+    const randPoint = () => ({
+      x: p + Math.random()*(maxX - p),
+      y: p + Math.random()*(maxY - p)
+    });
 
-    last = {x,y};
-    return {x,y};
+    if(last.x === null){
+      const pt = randPoint();
+      last = pt;
+      return pt;
+    }
+
+    const N = 28; // 20–40
+    let best = null;
+    let bestD = -1;
+
+    for(let i=0;i<N;i++){
+      const pt = randPoint();
+      const d = Math.hypot(pt.x - last.x, pt.y - last.y);
+      if(d > bestD){ bestD = d; best = pt; }
+    }
+
+    last = best;
+    return best;
   }
 
   function place(){
@@ -313,10 +367,11 @@
   function showFinal(){
     target.style.display = "none";
     finalOverlay.style.display = "flex";
+    hintBtn.disabled = true;
   }
-
   function hideFinal(){
     finalOverlay.style.display = "none";
+    hintBtn.disabled = false;
   }
 
   function next(){
@@ -327,6 +382,11 @@
     }
     hideFinal();
     target.style.display = "";
+
+    // перезапуск анимации появления каждый раунд
+    target.classList.remove("fx-none","fx-fade","fx-pop","fx-slide","fx-wiggle","fx-softfade","fx-hint");
+    void target.offsetWidth;
+
     setAnim();
     place();
     updateProgress();
@@ -344,6 +404,15 @@
     target.style.display = "";
   }
 
+  // Подсказка: пульсация/мигание бабочки
+  function runHint(){
+    if(target.style.display === "none") return;
+    if(finalOverlay.style.display === "flex") return;
+    target.classList.remove("fx-hint");
+    void target.offsetWidth;
+    target.classList.add("fx-hint");
+  }
+
   function buildWidgetCode(cfg){
     const configJson = JSON.stringify(cfg);
 
@@ -358,6 +427,26 @@
       backdrop-filter: blur(6px);
       pointer-events:none;
     }
+
+    #FX_ROOT .fx_hintBtn{
+      position:absolute;
+      right:64px; top:12px;
+      z-index:1000000;
+      width:38px; height:38px;
+      border-radius:12px;
+      border:1px solid rgba(255,255,255,.18);
+      background:rgba(0,0,0,.35);
+      color:rgba(255,255,255,.92);
+      font-size:18px;
+      cursor:pointer;
+      display:flex; align-items:center; justify-content:center;
+      backdrop-filter: blur(6px);
+      box-shadow: 0 12px 30px rgba(0,0,0,.18);
+      -webkit-tap-highlight-color: transparent;
+    }
+    #FX_ROOT .fx_hintBtn:hover{ background:rgba(0,0,0,.45); }
+    #FX_ROOT .fx_hintBtn:active{ transform: translateY(1px); }
+    #FX_ROOT .fx_hintBtn:disabled{ opacity:.45; cursor:not-allowed; }
 
     #FX_ROOT .fx_task{
       position:absolute; left:50%; top:18px; transform:translateX(-50%);
@@ -384,7 +473,7 @@
     #FX_ROOT .fx_target img{display:block;width:100%;height:100%;object-fit:contain}
 
     #FX_ROOT .fx_final{
-      position:absolute; inset:0; z-index:1000000;
+      position:absolute; inset:0; z-index:1000001;
       display:none; align-items:center; justify-content:center;
       padding:24px;
       background:rgba(0,0,0,.18);
@@ -407,15 +496,27 @@
     @keyframes fxPopIn{0%{opacity:0; transform:scale(.7)} 100%{opacity:1; transform:scale(1)}}
     @keyframes fxSlideIn{0%{opacity:0; transform:translateY(-10px)} 100%{opacity:1; transform:translateY(0)}}
     @keyframes fxWiggle{0%{opacity:0; transform:scale(.9) rotate(-4deg)} 70%{opacity:1; transform:scale(1.02) rotate(2deg)} 100%{opacity:1; transform:scale(1) rotate(0deg)}}
+    @keyframes fxSoftFade{0%{opacity:0; transform:scale(.96)} 100%{opacity:1; transform:scale(1)}}
 
     #FX_ROOT .fx-none{}
     #FX_ROOT .fx-fade{animation: fxFadeIn var(--dur,500ms) ease-out}
     #FX_ROOT .fx-pop{animation: fxPopIn var(--dur,500ms) cubic-bezier(.2,.8,.2,1)}
     #FX_ROOT .fx-slide{animation: fxSlideIn var(--dur,500ms) ease-out}
     #FX_ROOT .fx-wiggle{animation: fxWiggle var(--dur,650ms) cubic-bezier(.2,.8,.2,1)}
+    #FX_ROOT .fx-softfade{animation: fxSoftFade var(--dur,1100ms) ease-out}
+
+    @keyframes fxHintPulse{
+      0%   { transform:scale(1);   filter:drop-shadow(0 0 0 rgba(120,220,255,0)); opacity:1; }
+      25%  { transform:scale(1.18);filter:drop-shadow(0 0 10px rgba(120,220,255,.75)); opacity:1; }
+      50%  { transform:scale(1);   filter:drop-shadow(0 0 0 rgba(120,220,255,0)); opacity:.35; }
+      75%  { transform:scale(1.18);filter:drop-shadow(0 0 12px rgba(120,220,255,.85)); opacity:1; }
+      100% { transform:scale(1);   filter:drop-shadow(0 0 0 rgba(120,220,255,0)); opacity:1; }
+    }
+    #FX_ROOT .fx-hint{ animation: fxHintPulse 900ms ease-in-out 0s 2; }
   </style>
 
   <div class="fx_prog"></div>
+  <button class="fx_hintBtn" type="button" aria-label="Подсказка" title="Подсказка">💡</button>
   <div class="fx_task"></div>
   <div class="fx_target"><img alt=""></div>
 
@@ -431,6 +532,7 @@
     const cfg = ${configJson};
 
     const progEl = root.querySelector('.fx_prog');
+    const hintBtn = root.querySelector('.fx_hintBtn');
     const taskEl = root.querySelector('.fx_task');
     const target = root.querySelector('.fx_target');
     const img = target.querySelector('img');
@@ -447,7 +549,7 @@
     }
 
     function setAnim(){
-      target.classList.remove('fx-none','fx-fade','fx-pop','fx-slide','fx-wiggle');
+      target.classList.remove('fx-none','fx-fade','fx-pop','fx-slide','fx-wiggle','fx-softfade','fx-hint');
       const v = cfg.anim || 'none';
       target.classList.add(v==='none' ? 'fx-none' : ('fx-'+v));
       target.style.setProperty('--dur', Math.max(0, cfg.dur|0) + 'ms');
@@ -460,6 +562,10 @@
       finalCard.textContent = (cfg.endText || 'Молодец!').trim();
     }
 
+    function randPoint(p, maxX, maxY){
+      return { x: p + Math.random()*(maxX - p), y: p + Math.random()*(maxY - p) };
+    }
+
     function randomPos(){
       const {w,h} = rect();
       const s = cfg.size|0;
@@ -468,15 +574,23 @@
       const maxX = Math.max(p, w - p - s);
       const maxY = Math.max(p, h - p - s);
 
-      let x,y,tries=0;
-      do{
-        x = p + Math.random()*(maxX - p);
-        y = p + Math.random()*(maxY - p);
-        tries++;
-      }while(tries<15 && last.x!==null && Math.hypot(x-last.x,y-last.y) < s*1.4);
+      if(last.x === null){
+        const pt = randPoint(p, maxX, maxY);
+        last = pt;
+        return pt;
+      }
 
-      last = {x,y};
-      return {x,y};
+      const N = 28;
+      let best = null;
+      let bestD = -1;
+      for(let i=0;i<N;i++){
+        const pt = randPoint(p, maxX, maxY);
+        const d = Math.hypot(pt.x - last.x, pt.y - last.y);
+        if(d > bestD){ bestD = d; best = pt; }
+      }
+
+      last = best;
+      return best;
     }
 
     function place(){
@@ -488,9 +602,11 @@
     function showFinal(){
       target.style.display = 'none';
       final.style.display = 'flex';
+      hintBtn.disabled = true;
     }
     function hideFinal(){
       final.style.display = 'none';
+      hintBtn.disabled = false;
     }
 
     function next(){
@@ -501,9 +617,22 @@
       }
       hideFinal();
       target.style.display = '';
+
+      // перезапуск анимации
+      target.classList.remove('fx-none','fx-fade','fx-pop','fx-slide','fx-wiggle','fx-softfade','fx-hint');
+      void target.offsetWidth;
+
       setAnim();
       place();
       updateUI();
+    }
+
+    function runHint(){
+      if(target.style.display === 'none') return;
+      if(final.style.display === 'flex') return;
+      target.classList.remove('fx-hint');
+      void target.offsetWidth;
+      target.classList.add('fx-hint');
     }
 
     // init
@@ -516,6 +645,8 @@
     target.style.width  = (cfg.size|0) + 'px';
     target.style.height = (cfg.size|0) + 'px';
 
+    hintBtn.addEventListener('click', runHint);
+
     target.addEventListener('click', ()=>{
       const total = Math.max(1, cfg.rounds|0);
       if(found >= total) return;
@@ -525,7 +656,6 @@
       setTimeout(next, Math.max(0, cfg.gap|0));
     });
 
-    // resize страховка
     const ro = ('ResizeObserver' in window) ? new ResizeObserver(()=>{ if(target.style.display!=='none') place(); }) : null;
     if(ro) ro.observe(root);
     window.addEventListener('resize', ()=>{ if(target.style.display!=='none') place(); }, {passive:true});
@@ -540,7 +670,7 @@
   function currentCfg(){
     return {
       url: (imgUrl.value || "").trim(),
-      size: Math.max(18, Math.min(240, +size.value || 46)),
+      size: Math.max(18, Math.min(320, +size.value || 46)),
       rounds: Math.max(1, Math.min(99, +rounds.value || 7)),
       anim: anim.value,
       dur: Math.max(0, Math.min(3000, +dur.value || 0)),
@@ -575,14 +705,12 @@
     const res = await testImage(url);
     imgStatus.textContent = res.msg;
 
-    // если уже финал — просто обновим карточку
     finalCard.textContent = (endText.value || "Молодец!").trim();
 
-    // если персонаж видим — перепозиционируем
     if(target.style.display !== "none") place();
   }
 
-  // events
+  // UI events
   imgUrl.addEventListener("change", apply);
   size.addEventListener("input", apply);
   rounds.addEventListener("change", ()=>{ apply(); updateProgress(); });
@@ -616,7 +744,9 @@
     }
   });
 
-  // click to play
+  // Game events
+  hintBtn.addEventListener("click", runHint);
+
   target.addEventListener("click", ()=>{
     const total = Math.max(1, +rounds.value || 1);
     if(found >= total) return;
