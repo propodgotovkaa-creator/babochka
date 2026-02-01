@@ -1,208 +1,636 @@
 <!doctype html>
 <html lang="ru">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,height=device-height,initial-scale=1.0">
-<title>Genially — Редактор «Найди персонажа»</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,height=device-height,initial-scale=1.0" />
+<title>Genially: Редактор «Найди персонажа»</title>
 
 <style>
-:root{
-  --bg:#0b1020;
-  --panel:rgba(20,24,40,.82);
-  --line:rgba(255,255,255,.14);
-  --txt:rgba(255,255,255,.92);
-  --muted:rgba(255,255,255,.65);
-  --accent:#2d6cdf;
-  --ok:#16a34a;
-}
-*{box-sizing:border-box}
-html,body{margin:0;height:100%;font-family:system-ui;background:var(--bg);color:var(--txt)}
-.wrap{display:grid;grid-template-columns:360px 1fr;height:100%}
+  :root{
+    --bg:#0b1020;
+    --panel:rgba(20,24,40,.82);
+    --line:rgba(255,255,255,.14);
+    --txt:rgba(255,255,255,.92);
+    --muted:rgba(255,255,255,.65);
+    --btn:#2d6cdf;
+    --btn2:#16a34a;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%; margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial; background:var(--bg); color:var(--txt);}
+  .wrap{display:grid; grid-template-columns: 360px 1fr; height:100%;}
 
-.panel{
-  background:var(--panel);
-  border-right:1px solid var(--line);
-  padding:14px;
-  overflow:auto;
-}
+  .panel{
+    background:var(--panel);
+    border-right:1px solid var(--line);
+    padding:14px;
+    overflow:auto;
+    backdrop-filter: blur(8px);
+  }
+  .panel h1{font-size:16px;margin:0 0 12px}
+  .row{margin:10px 0}
+  label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+  input[type="text"], input[type="number"], select, textarea{
+    width:100%; padding:10px; border-radius:10px;
+    border:1px solid var(--line); background:rgba(255,255,255,.06);
+    color:var(--txt); outline:none;
+  }
+  input[type="range"]{width:100%}
+  textarea{resize:vertical; min-height:80px}
+  .two{display:grid; grid-template-columns: 1fr 1fr; gap:10px}
+  .btns{display:flex; gap:10px; flex-wrap:wrap; margin-top:10px}
+  button{
+    border:0; border-radius:10px; padding:10px 12px; cursor:pointer;
+    color:#fff; font-weight:700;
+  }
+  .b1{background:var(--btn)}
+  .b2{background:var(--btn2)}
+  .b3{background:rgba(255,255,255,.12); border:1px solid var(--line); color:var(--txt); font-weight:700}
 
-.panel h1{font-size:16px;margin:0 0 10px}
-label{font-size:12px;color:var(--muted)}
-input,select,textarea{
-  width:100%;
-  padding:8px;
-  margin-top:6px;
-  border-radius:8px;
-  border:1px solid var(--line);
-  background:rgba(255,255,255,.06);
-  color:var(--txt);
-}
+  .stage{
+    position:relative;
+    background:
+      linear-gradient(0deg, rgba(255,255,255,.04), rgba(255,255,255,.04)),
+      repeating-linear-gradient(45deg, rgba(255,255,255,.035) 0 12px, rgba(255,255,255,.02) 12px 24px);
+    overflow:hidden;
+  }
 
-.row{margin-bottom:12px}
-button{
-  border:0;
-  border-radius:8px;
-  padding:8px 12px;
-  font-weight:600;
-  cursor:pointer;
-}
-.primary{background:var(--accent);color:#fff}
-.secondary{background:var(--ok);color:#fff}
+  /* Верхний прогресс (можно оставить) */
+  .progBadge{
+    position:absolute; right:14px; top:14px; z-index:20;
+    background:rgba(0,0,0,.45); border:1px solid rgba(255,255,255,.18);
+    padding:6px 10px; border-radius:999px; font-size:12px; color:rgba(255,255,255,.9);
+    backdrop-filter: blur(6px);
+    pointer-events:none;
+  }
 
-.stage{
-  position:relative;
-  background:
-    repeating-linear-gradient(
-      45deg,
-      rgba(255,255,255,.04),
-      rgba(255,255,255,.04) 10px,
-      rgba(255,255,255,.02) 10px,
-      rgba(255,255,255,.02) 20px
-    );
-  overflow:hidden;
-}
+  /* Центрированная плашка задания */
+  .centerTask{
+    position:absolute; left:50%; top:18px; transform:translateX(-50%);
+    z-index:18;
+    max-width:min(720px, calc(100% - 40px));
+    background:rgba(0,0,0,.42);
+    border:1px solid rgba(255,255,255,.18);
+    border-radius:14px;
+    padding:10px 14px;
+    color:rgba(255,255,255,.95);
+    font:700 14px/1.25 system-ui,-apple-system,Segoe UI,Roboto,Arial;
+    text-align:center;
+    backdrop-filter: blur(8px);
+    pointer-events:none;
+    box-shadow: 0 12px 30px rgba(0,0,0,.22);
+  }
 
-.hud{
-  position:absolute;
-  top:10px;left:10px;right:10px;
-  display:flex;justify-content:space-between;
-  pointer-events:none;
-  z-index:10;
-}
+  /* Финальная плашка по центру экрана */
+  .finalOverlay{
+    position:absolute; inset:0; z-index:30;
+    display:none;
+    align-items:center;
+    justify-content:center;
+    padding:24px;
+    background:rgba(0,0,0,.18);
+    backdrop-filter: blur(2px);
+  }
+  .finalCard{
+    max-width:min(760px, calc(100% - 40px));
+    background:rgba(0,0,0,.55);
+    border:1px solid rgba(255,255,255,.18);
+    border-radius:18px;
+    padding:18px 18px;
+    color:rgba(255,255,255,.96);
+    font:800 18px/1.25 system-ui,-apple-system,Segoe UI,Roboto,Arial;
+    text-align:center;
+    box-shadow: 0 18px 50px rgba(0,0,0,.28);
+  }
 
-.badge{
-  background:rgba(0,0,0,.45);
-  padding:6px 10px;
-  border-radius:999px;
-  font-size:12px;
-}
+  /* Персонаж */
+  .target{
+    position:absolute;
+    width:46px; height:46px;
+    cursor:pointer;
+    user-select:none;
+    z-index:25;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .target img{display:block;width:100%;height:100%;object-fit:contain}
 
-.target{
-  position:absolute;
-  cursor:pointer;
-}
-.target img{
-  width:100%;
-  height:100%;
-  object-fit:contain;
-}
+  /* Анимации */
+  @keyframes fxFadeIn{from{opacity:0} to{opacity:1}}
+  @keyframes fxPopIn{0%{opacity:0; transform:scale(.7)} 100%{opacity:1; transform:scale(1)}}
+  @keyframes fxSlideIn{0%{opacity:0; transform:translateY(-10px)} 100%{opacity:1; transform:translateY(0)}}
+  @keyframes fxWiggle{
+    0%{opacity:0; transform:scale(.9) rotate(-4deg)}
+    70%{opacity:1; transform:scale(1.02) rotate(2deg)}
+    100%{opacity:1; transform:scale(1) rotate(0deg)}
+  }
+  .fx-none{}
+  .fx-fade{animation: fxFadeIn var(--dur,500ms) ease-out}
+  .fx-pop{animation: fxPopIn var(--dur,500ms) cubic-bezier(.2,.8,.2,1)}
+  .fx-slide{animation: fxSlideIn var(--dur,500ms) ease-out}
+  .fx-wiggle{animation: fxWiggle var(--dur,650ms) cubic-bezier(.2,.8,.2,1)}
 
-@keyframes pop{
-  from{opacity:0;transform:scale(.7)}
-  to{opacity:1;transform:scale(1)}
-}
-.fx-pop{animation:pop .55s ease}
+  .codeBox{height:260px; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:12px; line-height:1.35;}
 </style>
 </head>
 
 <body>
-
 <div class="wrap">
+
   <div class="panel">
     <h1>Редактор «Найди персонажа»</h1>
 
     <div class="row">
       <label>URL картинки персонажа</label>
-      <input id="imgUrl" type="text">
+      <input id="imgUrl" type="text" />
+      <div id="imgStatus" style="font-size:12px;color:var(--muted);margin-top:6px"></div>
+    </div>
+
+    <div class="two">
+      <div class="row">
+        <label>Размер (px): <span id="sizeVal">46</span></label>
+        <input id="size" type="range" min="18" max="180" value="46" />
+      </div>
+      <div class="row">
+        <label>Количество находок (раундов)</label>
+        <input id="rounds" type="number" min="1" max="99" value="7" />
+      </div>
+    </div>
+
+    <div class="two">
+      <div class="row">
+        <label>Анимация появления</label>
+        <select id="anim">
+          <option value="none">без анимации</option>
+          <option value="fade">fade</option>
+          <option value="pop" selected>pop</option>
+          <option value="slide">slide</option>
+          <option value="wiggle">wiggle</option>
+        </select>
+      </div>
+      <div class="row">
+        <label>Длительность анимации (мс)</label>
+        <input id="dur" type="number" min="0" max="3000" value="550" />
+      </div>
     </div>
 
     <div class="row">
-      <label>Размер (px)</label>
-      <input id="size" type="range" min="20" max="120" value="46">
+      <label>Инструкция / текст задания (показывается сверху по центру)</label>
+      <input id="taskText" type="text" value="Найди бабочку и нажми на неё!" />
     </div>
 
     <div class="row">
-      <label>Количество находок</label>
-      <input id="rounds" type="number" value="7" min="1">
+      <label>Текст в конце игры</label>
+      <textarea id="endText">Молодец! Приходи играть ещё раз 😊</textarea>
+    </div>
+
+    <div class="two">
+      <div class="row">
+        <label>Отступ от краёв (px)</label>
+        <input id="pad" type="number" min="0" max="200" value="12" />
+      </div>
+      <div class="row">
+        <label>Пауза между раундами (мс)</label>
+        <input id="gap" type="number" min="0" max="8000" value="200" />
+      </div>
+    </div>
+
+    <div class="btns">
+      <button class="b3" id="reset">Сброс</button>
+      <button class="b1" id="getCode">Получить код</button>
+      <button class="b2" id="copyCode">Копировать код</button>
     </div>
 
     <div class="row">
-      <label>Анимация</label>
-      <select id="anim">
-        <option value="none">без анимации</option>
-        <option value="pop" selected>pop</option>
-      </select>
+      <label>Код для вставки в Genially (HTML / Embed)</label>
+      <textarea id="code" class="codeBox" spellcheck="false"></textarea>
+      <div style="font-size:12px;color:var(--muted);margin-top:6px">
+        В Genially вставляй в HTML/Embed. Персонаж должен быть PNG/WebP/SVG с прозрачностью.
+      </div>
     </div>
-
-    <div class="row">
-      <button class="primary" id="gen">Получить код</button>
-      <button class="secondary" id="copy">Копировать</button>
-    </div>
-
-    <textarea id="code" style="height:220px;font-family:monospace"></textarea>
   </div>
 
   <div class="stage" id="stage">
-    <div class="hud">
-      <div class="badge" id="task">Найди бабочку и нажми на неё!</div>
-      <div class="badge" id="progress">0/7</div>
+    <div class="progBadge" id="progBadge">0/7</div>
+    <div class="centerTask" id="centerTask">Найди бабочку и нажми на неё!</div>
+
+    <div class="target fx-pop" id="target" style="--dur:550ms;">
+      <img id="targetImg" alt="" />
     </div>
-    <div class="target fx-pop" id="target">
-      <img id="img">
+
+    <div class="finalOverlay" id="finalOverlay">
+      <div class="finalCard" id="finalCard">Молодец! Приходи играть ещё раз 😊</div>
     </div>
   </div>
+
 </div>
 
 <script>
-/* ✅ ДЕФОЛТНАЯ БАБОЧКА — УЖЕ ПРАВИЛЬНАЯ ССЫЛКА */
-const DEFAULT_URL =
-  "https://propodgotovkaa-creator.github.io/babochka/babochka.png";
+  const $ = (id)=>document.getElementById(id);
 
-const imgUrl = document.getElementById('imgUrl');
-const size = document.getElementById('size');
-const rounds = document.getElementById('rounds');
-const anim = document.getElementById('anim');
-const target = document.getElementById('target');
-const img = document.getElementById('img');
-const stage = document.getElementById('stage');
-const progress = document.getElementById('progress');
-const codeBox = document.getElementById('code');
+  // ✅ дефолт: бабочка на GitHub Pages
+  const DEFAULT_URL = "https://propodgotovkaa-creator.github.io/babochka/babochka.png";
 
-let found = 0;
+  const imgUrl = $("imgUrl");
+  const imgStatus = $("imgStatus");
+  const size = $("size");
+  const sizeVal = $("sizeVal");
+  const rounds = $("rounds");
+  const anim = $("anim");
+  const dur = $("dur");
+  const pad = $("pad");
+  const gap = $("gap");
+  const taskText = $("taskText");
+  const endText = $("endText");
 
-/* INIT */
-imgUrl.value = DEFAULT_URL;
-img.src = DEFAULT_URL;
+  const stage = $("stage");
+  const target = $("target");
+  const targetImg = $("targetImg");
+  const progBadge = $("progBadge");
+  const centerTask = $("centerTask");
 
-function place(){
-  const r = stage.getBoundingClientRect();
-  const s = +size.value;
-  target.style.width = s+'px';
-  target.style.height = s+'px';
-  target.style.left = Math.random()*(r.width-s)+'px';
-  target.style.top  = Math.random()*(r.height-s)+'px';
-}
+  const finalOverlay = $("finalOverlay");
+  const finalCard = $("finalCard");
 
-target.onclick = ()=>{
-  found++;
-  progress.textContent = found+'/'+rounds.value;
-  if(found>=rounds.value){
-    target.style.display='none';
-    return;
+  const codeBox = $("code");
+
+  let found = 0;
+  let last = {x:null, y:null};
+
+  function clamp(n,a,b){ return Math.max(a, Math.min(b, n)); }
+
+  function rect(){
+    const r = stage.getBoundingClientRect();
+    return {w: Math.max(1, r.width), h: Math.max(1, r.height)};
   }
-  place();
-};
 
-imgUrl.onchange = ()=>{
-  img.src = imgUrl.value;
-};
+  function setTargetSize(px){
+    target.style.width = px + "px";
+    target.style.height = px + "px";
+    sizeVal.textContent = px;
+  }
 
-size.oninput = place;
+  function setAnim(){
+    target.classList.remove("fx-none","fx-fade","fx-pop","fx-slide","fx-wiggle");
+    const v = anim.value;
+    target.classList.add(v==="none" ? "fx-none" : ("fx-"+v));
+    target.style.setProperty("--dur", Math.max(0, +dur.value || 0) + "ms");
+  }
 
-place();
+  function updateTexts(){
+    centerTask.textContent = (taskText.value || "Найди персонажа!").trim();
+    finalCard.textContent = (endText.value || "Молодец!").trim();
+  }
 
-/* ГЕНЕРАЦИЯ КОДА */
-document.getElementById('gen').onclick = ()=>{
-  codeBox.value =
-`<div id="FX_ROOT">
-  <img src="${imgUrl.value}" style="width:${size.value}px">
+  function updateProgress(){
+    const total = Math.max(1, +rounds.value || 1);
+    progBadge.textContent = `${found}/${total}`;
+  }
+
+  function randomPos(){
+    const {w,h} = rect();
+    const s = parseFloat(target.style.width) || 46;
+    const p = clamp(+pad.value || 0, 0, 240);
+
+    const maxX = Math.max(p, w - p - s);
+    const maxY = Math.max(p, h - p - s);
+
+    let x,y,tries=0;
+    do{
+      x = p + Math.random()*(maxX - p);
+      y = p + Math.random()*(maxY - p);
+      tries++;
+    }while(tries<15 && last.x!==null && Math.hypot(x-last.x, y-last.y) < s*1.4);
+
+    last = {x,y};
+    return {x,y};
+  }
+
+  function place(){
+    const pos = randomPos();
+    target.style.left = pos.x + "px";
+    target.style.top  = pos.y + "px";
+  }
+
+  function showFinal(){
+    target.style.display = "none";
+    finalOverlay.style.display = "flex";
+  }
+
+  function hideFinal(){
+    finalOverlay.style.display = "none";
+  }
+
+  function next(){
+    const total = Math.max(1, +rounds.value || 1);
+    if(found >= total){
+      showFinal();
+      return;
+    }
+    hideFinal();
+    target.style.display = "";
+    setAnim();
+    place();
+    updateProgress();
+  }
+
+  function resetGame(){
+    found = 0;
+    last = {x:null,y:null};
+    hideFinal();
+    updateTexts();
+    setTargetSize(+size.value || 46);
+    setAnim();
+    updateProgress();
+    place();
+    target.style.display = "";
+  }
+
+  function buildWidgetCode(cfg){
+    const configJson = JSON.stringify(cfg);
+
+    return `<div id="FX_ROOT">
+  <style>
+    #FX_ROOT{position:relative;width:100%;height:100%;overflow:hidden;background:transparent;}
+
+    #FX_ROOT .fx_prog{
+      position:absolute; right:14px; top:14px; z-index:999999;
+      background:rgba(0,0,0,.45); border:1px solid rgba(255,255,255,.18);
+      padding:6px 10px; border-radius:999px; font-size:12px; color:rgba(255,255,255,.9);
+      backdrop-filter: blur(6px);
+      pointer-events:none;
+    }
+
+    #FX_ROOT .fx_task{
+      position:absolute; left:50%; top:18px; transform:translateX(-50%);
+      z-index:999998;
+      max-width:min(720px, calc(100% - 40px));
+      background:rgba(0,0,0,.42);
+      border:1px solid rgba(255,255,255,.18);
+      border-radius:14px;
+      padding:10px 14px;
+      color:rgba(255,255,255,.95);
+      font:700 14px/1.25 system-ui,-apple-system,Segoe UI,Roboto,Arial;
+      text-align:center;
+      backdrop-filter: blur(8px);
+      pointer-events:none;
+      box-shadow: 0 12px 30px rgba(0,0,0,.22);
+    }
+
+    #FX_ROOT .fx_target{
+      position:absolute; z-index:999999;
+      width:48px; height:48px;
+      cursor:pointer; user-select:none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #FX_ROOT .fx_target img{display:block;width:100%;height:100%;object-fit:contain}
+
+    #FX_ROOT .fx_final{
+      position:absolute; inset:0; z-index:1000000;
+      display:none; align-items:center; justify-content:center;
+      padding:24px;
+      background:rgba(0,0,0,.18);
+      backdrop-filter: blur(2px);
+      pointer-events:none;
+    }
+    #FX_ROOT .fx_finalCard{
+      max-width:min(760px, calc(100% - 40px));
+      background:rgba(0,0,0,.55);
+      border:1px solid rgba(255,255,255,.18);
+      border-radius:18px;
+      padding:18px 18px;
+      color:rgba(255,255,255,.96);
+      font:800 18px/1.25 system-ui,-apple-system,Segoe UI,Roboto,Arial;
+      text-align:center;
+      box-shadow: 0 18px 50px rgba(0,0,0,.28);
+    }
+
+    @keyframes fxFadeIn{from{opacity:0} to{opacity:1}}
+    @keyframes fxPopIn{0%{opacity:0; transform:scale(.7)} 100%{opacity:1; transform:scale(1)}}
+    @keyframes fxSlideIn{0%{opacity:0; transform:translateY(-10px)} 100%{opacity:1; transform:translateY(0)}}
+    @keyframes fxWiggle{0%{opacity:0; transform:scale(.9) rotate(-4deg)} 70%{opacity:1; transform:scale(1.02) rotate(2deg)} 100%{opacity:1; transform:scale(1) rotate(0deg)}}
+
+    #FX_ROOT .fx-none{}
+    #FX_ROOT .fx-fade{animation: fxFadeIn var(--dur,500ms) ease-out}
+    #FX_ROOT .fx-pop{animation: fxPopIn var(--dur,500ms) cubic-bezier(.2,.8,.2,1)}
+    #FX_ROOT .fx-slide{animation: fxSlideIn var(--dur,500ms) ease-out}
+    #FX_ROOT .fx-wiggle{animation: fxWiggle var(--dur,650ms) cubic-bezier(.2,.8,.2,1)}
+  </style>
+
+  <div class="fx_prog"></div>
+  <div class="fx_task"></div>
+  <div class="fx_target"><img alt=""></div>
+
+  <div class="fx_final">
+    <div class="fx_finalCard"></div>
+  </div>
+
+  <script>
+  (function(){
+    const root = document.getElementById('FX_ROOT');
+    if(!root) return;
+
+    const cfg = ${configJson};
+
+    const progEl = root.querySelector('.fx_prog');
+    const taskEl = root.querySelector('.fx_task');
+    const target = root.querySelector('.fx_target');
+    const img = target.querySelector('img');
+    const final = root.querySelector('.fx_final');
+    const finalCard = root.querySelector('.fx_finalCard');
+
+    let found = 0;
+    let last = {x:null, y:null};
+
+    function clamp(n,a,b){ return Math.max(a, Math.min(b, n)); }
+    function rect(){
+      const r = root.getBoundingClientRect();
+      return {w: Math.max(1, r.width), h: Math.max(1, r.height)};
+    }
+
+    function setAnim(){
+      target.classList.remove('fx-none','fx-fade','fx-pop','fx-slide','fx-wiggle');
+      const v = cfg.anim || 'none';
+      target.classList.add(v==='none' ? 'fx-none' : ('fx-'+v));
+      target.style.setProperty('--dur', Math.max(0, cfg.dur|0) + 'ms');
+    }
+
+    function updateUI(){
+      const total = Math.max(1, cfg.rounds|0);
+      progEl.textContent = found + '/' + total;
+      taskEl.textContent = (cfg.task || 'Найди персонажа!').trim();
+      finalCard.textContent = (cfg.endText || 'Молодец!').trim();
+    }
+
+    function randomPos(){
+      const {w,h} = rect();
+      const s = cfg.size|0;
+      const p = clamp(cfg.pad|0, 0, 240);
+
+      const maxX = Math.max(p, w - p - s);
+      const maxY = Math.max(p, h - p - s);
+
+      let x,y,tries=0;
+      do{
+        x = p + Math.random()*(maxX - p);
+        y = p + Math.random()*(maxY - p);
+        tries++;
+      }while(tries<15 && last.x!==null && Math.hypot(x-last.x,y-last.y) < s*1.4);
+
+      last = {x,y};
+      return {x,y};
+    }
+
+    function place(){
+      const pos = randomPos();
+      target.style.left = pos.x + 'px';
+      target.style.top  = pos.y + 'px';
+    }
+
+    function showFinal(){
+      target.style.display = 'none';
+      final.style.display = 'flex';
+    }
+    function hideFinal(){
+      final.style.display = 'none';
+    }
+
+    function next(){
+      const total = Math.max(1, cfg.rounds|0);
+      if(found >= total){
+        showFinal();
+        return;
+      }
+      hideFinal();
+      target.style.display = '';
+      setAnim();
+      place();
+      updateUI();
+    }
+
+    // init
+    root.style.position = 'relative';
+    root.style.background = 'transparent';
+
+    img.referrerPolicy = 'no-referrer';
+    img.src = cfg.url || '';
+
+    target.style.width  = (cfg.size|0) + 'px';
+    target.style.height = (cfg.size|0) + 'px';
+
+    target.addEventListener('click', ()=>{
+      const total = Math.max(1, cfg.rounds|0);
+      if(found >= total) return;
+      found++;
+      updateUI();
+      target.style.display = 'none';
+      setTimeout(next, Math.max(0, cfg.gap|0));
+    });
+
+    // resize страховка
+    const ro = ('ResizeObserver' in window) ? new ResizeObserver(()=>{ if(target.style.display!=='none') place(); }) : null;
+    if(ro) ro.observe(root);
+    window.addEventListener('resize', ()=>{ if(target.style.display!=='none') place(); }, {passive:true});
+
+    updateUI();
+    next();
+  })();
+  <\/script>
 </div>`;
-};
+  }
 
-document.getElementById('copy').onclick = ()=>{
-  navigator.clipboard.writeText(codeBox.value);
-};
+  function currentCfg(){
+    return {
+      url: (imgUrl.value || "").trim(),
+      size: Math.max(18, Math.min(240, +size.value || 46)),
+      rounds: Math.max(1, Math.min(99, +rounds.value || 7)),
+      anim: anim.value,
+      dur: Math.max(0, Math.min(3000, +dur.value || 0)),
+      pad: Math.max(0, Math.min(240, +pad.value || 0)),
+      gap: Math.max(0, Math.min(8000, +gap.value || 0)),
+      task: (taskText.value || "").trim(),
+      endText: (endText.value || "").trim()
+    };
+  }
+
+  async function testImage(url){
+    return new Promise((resolve)=>{
+      if(!url){ resolve({ok:false, msg:""}); return; }
+      const i = new Image();
+      i.onload = ()=> resolve({ok:true, msg:"✓ картинка загружена"});
+      i.onerror = ()=> resolve({ok:false, msg:"⚠️ не удалось загрузить картинку (проверь URL)"});
+      i.referrerPolicy = "no-referrer";
+      i.src = url;
+    });
+  }
+
+  async function apply(){
+    updateTexts();
+    setTargetSize(+size.value || 46);
+    setAnim();
+    updateProgress();
+
+    const url = (imgUrl.value || "").trim();
+    targetImg.referrerPolicy = "no-referrer";
+    targetImg.src = url;
+
+    const res = await testImage(url);
+    imgStatus.textContent = res.msg;
+
+    // если уже финал — просто обновим карточку
+    finalCard.textContent = (endText.value || "Молодец!").trim();
+
+    // если персонаж видим — перепозиционируем
+    if(target.style.display !== "none") place();
+  }
+
+  // events
+  imgUrl.addEventListener("change", apply);
+  size.addEventListener("input", apply);
+  rounds.addEventListener("change", ()=>{ apply(); updateProgress(); });
+  anim.addEventListener("change", apply);
+  dur.addEventListener("change", apply);
+  pad.addEventListener("change", apply);
+  gap.addEventListener("change", apply);
+  taskText.addEventListener("input", updateTexts);
+  endText.addEventListener("input", updateTexts);
+
+  $("reset").addEventListener("click", resetGame);
+
+  $("getCode").addEventListener("click", ()=>{
+    const cfg = currentCfg();
+    codeBox.value = buildWidgetCode(cfg);
+    codeBox.focus();
+    codeBox.select();
+  });
+
+  $("copyCode").addEventListener("click", async ()=>{
+    if(!codeBox.value.trim()){
+      const cfg = currentCfg();
+      codeBox.value = buildWidgetCode(cfg);
+    }
+    try{
+      await navigator.clipboard.writeText(codeBox.value);
+      imgStatus.textContent = "✓ код скопирован";
+    }catch(e){
+      codeBox.focus(); codeBox.select();
+      imgStatus.textContent = "⚠️ не смог скопировать автоматически — выделила код, нажми Cmd+C";
+    }
+  });
+
+  // click to play
+  target.addEventListener("click", ()=>{
+    const total = Math.max(1, +rounds.value || 1);
+    if(found >= total) return;
+    found++;
+    updateProgress();
+    target.style.display = "none";
+    setTimeout(next, Math.max(0, +gap.value || 0));
+  });
+
+  // INIT
+  imgUrl.value = DEFAULT_URL;
+  targetImg.src = DEFAULT_URL;
+  updateTexts();
+  resetGame();
 </script>
-
 </body>
 </html>
